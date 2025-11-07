@@ -1,0 +1,217 @@
+✅ Full Setup Plan (Scheduled Lambda to Move Files from SharePoint to S3)
+📍 Step 1: Register an App in Azure to Access SharePoint
+📍 Step 2: Create an S3 Bucket in AWS
+📍 Step 3: Prepare and Deploy the Lambda Function (with Python code)
+📍 Step 4: Store SharePoint Secrets Securely (via AWS Secrets Manager or Env Vars)
+📍 Step 5: Schedule the Lambda with Amazon EventBridge (CloudWatch Scheduler)
+
+
+🔧 Step 1: Register Azure App for SharePoint Access
+1.1 Go to Azure Portal
+👉 https://portal.azure.com → Search for "App registrations" → Click "New registration"
+
+Name: SharePointS3Mover
+
+Redirect URI: leave blank
+
+Register
+
+1.2 Save These Values
+After registration, go to your app and note down:
+
+Application (client) ID
+
+Directory (tenant) ID
+
+@@@
+
+https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps/ApplicationMenuBlade/~/Overview/appId/7a6a03f8-01d5-49bd-b1cb-0906fcd4c657/objectId/dcb7218d-ee0e-4958-80b8-46d6fed7c28e/isMSAApp~/false/defaultBlade/Overview/appSignInAudience/AzureADMyOrg/servicePrincipalCreated~/true
+
+Application (client) Id - 7a6a03f8-01d5-49bd-b1cb-0906fcd4c657
+Directory (tenant) ID - 7395e727-dab0-4ee4-a62f-eea0cc9cfa29
+
+@@@
+
+
+1.3 Generate Client Secret
+Go to Certificates & Secrets → New Client Secret
+
+Set expiry (e.g., 6 months or 1 year)
+
+Save the value (you’ll need it in AWS)
+
+@@@
+
+#####
+#####
+
+@@@
+
+
+
+1.4 Assign Microsoft Graph Permissions
+Go to API permissions → Add permission → Microsoft Graph
+
+Choose Application permissions
+
+Sites.Read.All
+
+Files.Read.All
+
+Click Grant admin consent
+
+
+
+🪣 Step 2: Create an S3 Bucket
+2.1 Go to AWS Console → S3
+Click Create Bucket
+
+Name: e.g., sharepoint-backup-data-chetan
+
+Keep default settings or adjust per your needs (e.g., versioning, encryption)
+
+
+✅ Step 3: Create Lambda Function to Move Files from SharePoint to S3 (using Env Vars)
+✅ 3.1: Write the Python Script
+Let’s start by writing the basic version of the Lambda function.
+
+Here’s the code:
+
+python
+Copy
+Edit
+# lambda_function.py
+
+import os
+import json
+import boto3
+import requests
+
+def get_access_token():
+    url = f'https://login.microsoftonline.com/{os.environ["TENANT_ID"]}/oauth2/v2.0/token'
+    headers = {
+        'Content-Type': 'application/x-www-form-urlencoded'
+    }
+    data = {
+        'grant_type': 'client_credentials',
+        'client_id': os.environ['CLIENT_ID'],
+        'client_secret': os.environ['CLIENT_SECRET'],
+        'scope': 'https://graph.microsoft.com/.default'
+    }
+
+    response = requests.post(url, headers=headers, data=data)
+    return response.json().get('access_token')
+
+
+def lambda_handler(event, context):
+    token = get_access_token()
+
+    headers = {
+        'Authorization': f'Bearer {token}'
+    }
+
+    site_id = os.environ['SITE_ID']
+    drive_id = os.environ['DRIVE_ID']
+    folder_path = os.environ['FOLDER_PATH']
+    s3_bucket = os.environ['S3_BUCKET']
+
+    # Step 1: List files in the SharePoint folder
+    list_url = f'https://graph.microsoft.com/v1.0/sites/{site_id}/drives/{drive_id}/root:/{folder_path}:/children'
+    list_response = requests.get(list_url, headers=headers)
+
+    if list_response.status_code != 200:
+        return {'error': 'Failed to list files', 'details': list_response.text}
+
+    items = list_response.json().get('value', [])
+
+    s3 = boto3.client('s3')
+
+    for item in items:
+        if 'file' in item:  # skip folders
+            file_name = item['name']
+            download_url = item['@microsoft.graph.downloadUrl']
+
+            # Download file content
+            file_response = requests.get(download_url)
+            file_data = file_response.content
+
+            # Upload to S3
+            s3.put_object(Bucket=s3_bucket, Key=file_name, Body=file_data)
+
+            print(f"Uploaded {file_name} to S3")
+
+    return {
+        'statusCode': 200,
+        'body': f'Successfully transferred {len(items)} files.'
+    }
+✅ 3.2: Create requirements.txt
+text
+Copy
+Edit
+requests
+boto3
+✅ 3.3: Package Your Lambda Deployment
+Create a new folder on your system:
+
+bash
+Copy
+Edit
+mkdir sharepoint_to_s3_lambda && cd sharepoint_to_s3_lambda
+Save the above Python file as lambda_function.py
+
+Save the requirements.txt
+
+Install the dependencies:
+
+bash
+Copy
+Edit
+pip install -r requirements.txt -t .
+Create the ZIP file:
+
+bash
+Copy
+Edit
+zip -r sharepoint_to_s3.zip .
+✅ 3.4: Deploy to AWS Lambda (via Console)
+Go to AWS Console → Lambda → Create function
+
+Name: SharePointToS3Mover
+
+Runtime: Python 3.11 or 3.9
+
+Execution role: Create new role with basic Lambda permissions
+
+Upload the ZIP file you created above under Code source
+
+Set environment variables:
+
+Key	Value
+CLIENT_ID	From Azure App
+CLIENT_SECRET	From Azure App
+TENANT_ID	From Azure Directory
+SITE_ID	From Graph API
+DRIVE_ID	From Graph API
+FOLDER_PATH	Documents/MyFolder
+S3_BUCKET	Your bucket name
+
+🔍 How to Get SITE_ID and DRIVE_ID
+Once you get the access token, you can find these using:
+
+Get Site ID
+http
+Copy
+Edit
+GET https://graph.microsoft.com/v1.0/sites?search=your_site_name
+Get Drive ID
+http
+Copy
+Edit
+GET https://graph.microsoft.com/v1.0/sites/{site-id}/drives
+You can test this using Postman or a temporary Python script locally.
+
+✅ 3.5: Test Lambda (Manually)
+Go to your Lambda → Test → Create test event (you can leave it empty for now).
+
+Click Test and see if the file(s) appear in S3.
+

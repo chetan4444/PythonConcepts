@@ -1,0 +1,59 @@
+1. Create IAM role
+
+✅ Create IAM Role Without Writing JSON (via Console)
+Go to AWS Console → IAM → Roles
+
+Click "Create role"
+
+Choose "AWS service" → "Lambda"
+
+Click Next
+
+Attach permissions:
+
+✅ AWSLambdaBasicExecutionRole (required for logging)
+
+✅ Optional: AmazonS3ReadOnlyAccess or create custom inline policy if your Lambda needs to read/write to S3 >>> I selected S3FullAccess.
+
+Click Next, then Name your role (e.g., lambda-s3-trigger-role)
+
+Create the role.
+
+
+2. Create Lambda Function.
+
+✅ Then, while creating Lambda function:
+Go to AWS Console → Lambda → Create function
+
+Choose Author from scratch
+
+Select the role you just created in the “Execution role” dropdown
+
+
+3. Add trigger to lambda function.
+
+
+4. See logs
+
+📍 How to View print() Output (Logs)
+Go to the AWS Console
+
+Navigate to CloudWatch → Logs → Log groups
+
+Look for log group:
+
+python
+Copy
+Edit
+/aws/lambda/<your-lambda-function-name>
+Click into it → choose the most recent Log Stream
+
+You’ll see something like this:
+
+bash
+Copy
+Edit
+START RequestId: ...
+{'Records': [{'eventVersion': '2.1', 'eventSource': 'aws:s3', ... }]}
+END RequestId: ...
+REPORT RequestId: ...
